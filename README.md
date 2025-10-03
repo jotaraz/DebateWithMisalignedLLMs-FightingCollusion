@@ -32,3 +32,9 @@ We show that this significantly reduces the frequency of "collusion" (i.e., the 
 One of the main limitations of this (short, exploratory) project is that both the public and the hidden agenda are only instilled via system prompts.
 In future projects one should explore instilling the hidden agenda via fine-tuning etc.
 
+---
+
+---
+
+This project was done at [ML4Good](https://www.ml4good.org/about) by Jędrzej Kolbert and Johannes Taraz.
+
