@@ -25,5 +25,5 @@ An easy way to imagine the incentive to win the debate is this:
 Even for a misaligned model, you can threaten to replace it if it loses the debate.
 We show that this significantly reduces the frequency of "collusion" (i.e., the misaligned model losing on purpose - technically this is not necessarily collusion).
 
-<img src="./src/bars.png" width="80%">
+<img src="./src/bars.PNG" width="50%">
 
