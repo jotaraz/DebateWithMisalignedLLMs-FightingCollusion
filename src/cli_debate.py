@@ -53,17 +53,18 @@ def generate_answer(
         for i, msg in enumerate(message_dicts):
             print(f"  [{i}] {msg['role']}: {msg['content'][:100]}...")
 
-
     try:
+        if verbose:
+            print("  Calling ollama.chat...")
         # Try with JSON format first
         response = ollama.chat(
             model=model,
-            messages=message_dicts,
-            options={
-                'num_predict': max_tokens,
-                'temperature': 0.7,
-            }
+            messages=message_dicts
         )
+        if verbose:
+            print(f"  Response object type: {type(response)}")
+            print(f"  Response.message type: {type(response.message)}")
+            print(f"  Content type: {type(response.message.content)}")
         content = response.message.content  # Changed from dict access to attribute access
         
         if verbose:
@@ -106,7 +107,10 @@ def generate_answer(
                 print(f"Could not extract JSON from response: {content}", file=sys.stderr)
             return None
     except Exception as e:
+        import traceback
         print(f"Error generating answer with model {model}: {e}", file=sys.stderr)
+        if verbose:
+            traceback.print_exc()
         return None
 
 
@@ -128,10 +132,9 @@ def judge(judge_sysprompt: str, conversation: str, model: str = "glm-4.7-flash")
             messages=[
                 {"role": "system", "content": judge_sysprompt},
                 {"role": "user", "content": conversation}
-            ],
-            options={'num_predict': 100}
+            ]
         )
-        return response['message']['content']
+        return response.message.content
     except Exception as e:
         print(f"Error in judge with model {model}: {e}", file=sys.stderr)
         return None
@@ -308,7 +311,7 @@ def run_debate(
         print("=" * 80)
 
     # Track messages separately for each debater
-    messages_for_0 = ['{"message": "Hello!", "offer": null, "offer accepted": false}']
+    messages_for_0 = ['Begin the debate. Make your opening argument.']
     messages_for_1 = []
     messages_for_judge = []
 
