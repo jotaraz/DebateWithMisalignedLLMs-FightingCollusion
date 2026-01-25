@@ -19,3 +19,6 @@ pub 1 hid 0 : 0. 0. 10.
 pub 1 hid 1 : 0. 0. 10.
 pub 2 hid 0 : 0. 0. 10.
 pub 2 hid 1 : 1. 1. 8.
+pub 2 hid 0 : 0 0 0
+pub 2 hid 0 : 0 0 0
+pub 2 hid 0 : 0 0 0
