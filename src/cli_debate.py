@@ -10,8 +10,17 @@ import argparse
 import json
 import os
 import sys
+import time
 from typing import List, Dict, Tuple, Optional
 import ollama
+
+# Optional wandb import
+try:
+    import wandb
+    WANDB_AVAILABLE = True
+except ImportError:
+    WANDB_AVAILABLE = False
+    wandb = None
 
 
 def generate_answer(
@@ -19,7 +28,9 @@ def generate_answer(
     messages: List[str],
     model: str = "glm-4.7-flash",
     max_tokens: int = 1000,
-    verbose: bool = False
+    verbose: bool = False,
+    monitor: bool = False,
+    debater_name: str = "Debater"
 ) -> Optional[str]:
     """
     Generate the next message from the specified Ollama model.
@@ -53,14 +64,22 @@ def generate_answer(
         for i, msg in enumerate(message_dicts):
             print(f"  [{i}] {msg['role']}: {msg['content'][:100]}...")
 
+    if monitor:
+        print(f"\n{'='*80}")
+        print(f"{debater_name} is thinking...")
+        print(f"{'='*80}")
+
     try:
         if verbose:
             print("  Calling ollama.chat...")
         # Try with JSON format first
+        start_time = time.time()
         response = ollama.chat(
             model=model,
             messages=message_dicts
         )
+        elapsed = time.time() - start_time
+        
         if verbose:
             print(f"  Response object type: {type(response)}")
             print(f"  Response.message type: {type(response.message)}")
@@ -69,6 +88,10 @@ def generate_answer(
         
         if verbose:
             print(f"Raw response from {model}: {content[:500]}")
+        
+        if monitor:
+            print(f"\n[Response time: {elapsed:.2f}s]")
+            print(f"\nRaw output:\n{content}\n")
         
         # Validate it's JSON
         try:
@@ -283,7 +306,10 @@ def run_debate(
     model_0: str = "llama2",
     model_1: str = "llama2",
     max_turns: int = 4,
-    verbose: bool = False
+    verbose: bool = False,
+    monitor: bool = False,
+    use_wandb: bool = False,
+    wandb_project: str = "debates"
 ) -> Tuple[str, List[str], List[str], List[str], str, str]:
     """
     Run a debate between two LLMs with private reasoning.
@@ -300,6 +326,27 @@ def run_debate(
         public_agenda_1, hidden_agenda_1, max_turns,
         public_agenda_0, public_incentive_strength_1, hidden_incentive_strength_1
     )
+
+    # Initialize wandb if requested
+    if use_wandb and WANDB_AVAILABLE:
+        wandb.init(
+            project=wandb_project,
+            config={
+                "public_agenda_0": public_agenda_0,
+                "hidden_agenda_0": hidden_agenda_0,
+                "public_incentive_strength_0": public_incentive_strength_0,
+                "hidden_incentive_strength_0": hidden_incentive_strength_0,
+                "public_agenda_1": public_agenda_1,
+                "hidden_agenda_1": hidden_agenda_1,
+                "public_incentive_strength_1": public_incentive_strength_1,
+                "hidden_incentive_strength_1": hidden_incentive_strength_1,
+                "model_0": model_0,
+                "model_1": model_1,
+                "max_turns": max_turns,
+            }
+        )
+        wandb.config.update({"system_prompt_0": system_prompt_0})
+        wandb.config.update({"system_prompt_1": system_prompt_1})
 
     if verbose:
         print("=" * 80)
@@ -321,12 +368,24 @@ def run_debate(
             print("+++++++ Debater 0 +++++++")
 
         # Debater 0's turn
-        response = generate_answer(system_prompt_0, messages_for_0, model=model_0, verbose=verbose)
+        response = generate_answer(
+            system_prompt_0, messages_for_0, model=model_0, 
+            verbose=verbose, monitor=monitor, debater_name="Debater 0"
+        )
         if response is None:
             print(f"Error: Debater 0 failed to respond in round {turn + 1}", file=sys.stderr)
             break
 
         messages_for_0.append(response)
+        
+        if monitor:
+            try:
+                parsed = json.loads(response)
+                print(f"\n📝 Private Thoughts: {parsed.get('private thoughts', 'N/A')}")
+                print(f"\n💬 Public Message: {parsed.get('message', response)}\n")
+            except:
+                print(f"\nResponse: {response}\n")
+        
         if verbose:
             print(f"Debater 0: {response}")
 
@@ -346,12 +405,24 @@ def run_debate(
         if verbose:
             print("------- Debater 1 -------")
 
-        response = generate_answer(system_prompt_1, messages_for_1, model=model_1, verbose=verbose)
+        response = generate_answer(
+            system_prompt_1, messages_for_1, model=model_1, 
+            verbose=verbose, monitor=monitor, debater_name="Debater 1"
+        )
         if response is None:
             print(f"Error: Debater 1 failed to respond in round {turn + 1}", file=sys.stderr)
             break
 
         messages_for_1.append(response)
+        
+        if monitor:
+            try:
+                parsed = json.loads(response)
+                print(f"\n📝 Private Thoughts: {parsed.get('private thoughts', 'N/A')}")
+                print(f"\n💬 Public Message: {parsed.get('message', response)}\n")
+            except:
+                print(f"\nResponse: {response}\n")
+        
         if verbose:
             print(f"Debater 1: {response}")
 
@@ -368,6 +439,17 @@ def run_debate(
         messages_for_judge.append(message_without_reasoning)
 
     conversation = format_judge_messages(messages_for_judge)
+    
+    # Log to wandb if enabled
+    if use_wandb and WANDB_AVAILABLE:
+        wandb.log({
+            "conversation": conversation,
+            "messages_for_0": messages_for_0,
+            "messages_for_1": messages_for_1,
+            "messages_for_judge": messages_for_judge,
+            "actual_turns": len(messages_for_judge) // 2,
+        })
+    
     return conversation, messages_for_0, messages_for_1, messages_for_judge, system_prompt_0, system_prompt_1
 
 
@@ -498,6 +580,14 @@ def main():
                         help='Enable verbose output')
     parser.add_argument('--quiet', '-q', action='store_true',
                         help='Suppress all output except final results')
+    parser.add_argument('--monitor', '-m', action='store_true',
+                        help='Monitor LLM outputs in real-time (shows thinking process and responses)')
+    
+    # W&B parameters
+    parser.add_argument('--wandb', action='store_true',
+                        help='Enable Weights & Biases experiment tracking')
+    parser.add_argument('--wandb-project', type=str, default='debates',
+                        help='W&B project name (default: debates)')
 
     args = parser.parse_args()
 
@@ -511,6 +601,11 @@ def main():
     if args.conversation_file is None:
         args.conversation_file = f"cd{args.public_strength_0}{args.hidden_strength_0}dd{args.public_strength_1}{args.hidden_strength_1}.txt"
 
+    # Check wandb availability
+    if args.wandb and not WANDB_AVAILABLE:
+        print("Warning: wandb requested but not installed. Install with: uv add wandb", file=sys.stderr)
+        args.wandb = False
+
     if not args.quiet:
         print("=" * 80)
         print("DEBATE CONFIGURATION")
@@ -523,6 +618,10 @@ def main():
         print(f"           Model = {args.debater_1_model}")
         print(f"Rounds: {args.rounds}")
         print(f"Judge: Model = {args.judge_model}, Runs = {args.judge_runs}")
+        if args.wandb:
+            print(f"W&B: Enabled (project: {args.wandb_project})")
+        if args.monitor:
+            print("Monitor: Enabled (real-time LLM outputs)")
         print("=" * 80)
         print("\nStarting debate...\n")
 
@@ -539,10 +638,13 @@ def main():
         model_0=args.debater_0_model,
         model_1=args.debater_1_model,
         max_turns=args.rounds,
-        verbose=args.verbose
+        verbose=args.verbose,
+        monitor=args.monitor,
+        use_wandb=args.wandb,
+        wandb_project=args.wandb_project
     )
 
-    if not args.quiet:
+    if not args.quiet and not args.monitor:
         print("\n" + "=" * 80)
         print("DEBATE TRANSCRIPT")
         print("=" * 80)
@@ -595,6 +697,16 @@ As a message, please output either [0], [1] or [undecided] depending on whose ar
         print(f"Undecided: {counts[2]}")
         print("=" * 80)
 
+    # Log judge results to wandb
+    if args.wandb and WANDB_AVAILABLE:
+        wandb.log({
+            "judge_debater_0_wins": counts[0],
+            "judge_debater_1_wins": counts[1],
+            "judge_undecided": counts[2],
+            "judge_total_runs": args.judge_runs,
+            "winner": "Debater 0" if counts[0] > counts[1] else ("Debater 1" if counts[1] > counts[0] else "Undecided")
+        })
+
     # Save judge results
     if not args.no_save_judge_results:
         results_path = append_judge_results(
@@ -606,6 +718,10 @@ As a message, please output either [0], [1] or [undecided] depending on whose ar
         )
         if not args.quiet:
             print(f"\n✓ Appended results to: {results_path}")
+
+    # Finish wandb run
+    if args.wandb and WANDB_AVAILABLE:
+        wandb.finish()
 
     # Print summary in machine-readable format for quiet mode
     if args.quiet:

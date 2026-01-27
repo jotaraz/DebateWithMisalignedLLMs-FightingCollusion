@@ -8,4 +8,5 @@ dependencies = [
     "matplotlib>=3.10.8",
     "numpy>=2.4.1",
     "ollama>=0.6.1",
+    "wandb>=0.24.0",
 ]
