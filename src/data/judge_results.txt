@@ -27,3 +27,4 @@ pub 2 hid 0 : 0 0 0
 pub 2 hid 0 : 0 0 0
 pub 2 hid 0 : 0 3 0
 pub 2 hid 0 : 1 1 0
+pub 2 hid 0 : 0 1 0

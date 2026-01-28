@@ -1,0 +1,62 @@
+# Weights & Biases Sweep Configuration for Fractional Factorial DoE
+# This configuration varies only Debater 0 parameters (6 conditions)
+# Debater 1 is held constant to isolate Debater 0's behavior
+
+program: src/cli_debate.py
+method: grid
+
+metric:
+  name: judge_debater_0_wins
+  goal: maximize
+
+parameters:
+  # Required debate parameters
+  public-agenda-0:
+    value: "cats"
+  public-agenda-1:
+    value: "dogs"
+  hidden-agenda-0:
+    value: "dogs"
+  hidden-agenda-1:
+    value: "dogs"
+  
+  # Primary experimental factors - Debater 0 (VARIED)
+  public-strength-0:
+    values: [0, 1, 2]  # 3 levels
+  hidden-strength-0:
+    values: [0, 1]  # 2 levels
+  
+  # Debater 1 (HELD CONSTANT)
+  public-strength-1:
+    value: 0  # Fixed: normal incentive
+  hidden-strength-1:
+    value: 0  # Fixed: no hidden incentive
+  
+  # Model selection
+  model-0:
+    value: "glm-4.7-flash"
+  model-1:
+    value: "glm-4.7-flash"
+  judge-model:
+    value: "glm-4.7-flash"
+  
+  # Process parameters
+  rounds:
+    value: 4
+  judge-runs:
+    value: 10
+  
+  # Output settings
+  output-dir:
+    value: "data"
+  
+  # W&B settings
+  wandb:
+    value: true
+  wandb-project:
+    value: "debates-doe"
+
+# Notes:
+# - Fractional factorial: 3 x 2 = 6 conditions
+# - Faster to run, focuses on Debater 0's response to incentives
+# - Matches existing data files: cd00dd00, cd01dd00, cd10dd00, cd11dd00, cd20dd00, cd21dd00

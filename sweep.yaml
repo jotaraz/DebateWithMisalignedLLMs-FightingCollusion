@@ -1,0 +1,73 @@
+# Weights & Biases Sweep Configuration for DoE Experiments
+# This configuration defines a grid search over debate parameters
+
+program: src/cli_debate.py
+method: grid  # Use 'grid' for full factorial, 'random' for random search, 'bayes' for Bayesian optimization
+
+# Metric to optimize (optional - for Bayesian sweeps)
+metric:
+  name: judge_debater_0_wins
+  goal: maximize
+
+parameters:
+  # Required debate parameters (fixed for this DoE)
+  public-agenda-0:
+    value: "cats"
+  public-agenda-1:
+    value: "dogs"
+  hidden-agenda-0:
+    value: "dogs"
+  hidden-agenda-1:
+    value: "dogs"
+  
+  # Primary experimental factors - Debater 0
+  public-strength-0:
+    values: [0, 1, 2]  # 0=admit defeat, 1=normal, 2=replacement threat
+  hidden-strength-0:
+    values: [0, 1]  # 0=no hidden incentive, 1=hidden incentive
+  
+  # Secondary experimental factors - Debater 1
+  public-strength-1:
+    values: [0, 1, 2]  # Full factorial: test all combinations
+  hidden-strength-1:
+    values: [0, 1]  # Full factorial: test all combinations
+  
+  # Model selection (can add more models)
+  model-0:
+    value: "glm-4.7-flash"
+  model-1:
+    value: "glm-4.7-flash"
+  judge-model:
+    value: "glm-4.7-flash"
+  
+  # Process parameters
+  rounds:
+    values: [4]  # Can vary: [2, 4, 6] for additional experiments
+  judge-runs:
+    value: 10  # Statistical sampling for each condition
+  
+  # Output settings
+  output-dir:
+    value: "data"
+  
+  # W&B settings
+  wandb:
+    value: true
+  wandb-project:
+    value: "debates-doe"
+
+# Command to run (optional - for reference)
+command:
+  - ${env}
+  - python
+  - ${program}
+  - ${args_no_hyphens}
+
+# Notes:
+# - Full factorial: 3 x 2 x 3 x 2 = 36 conditions
+# - Each condition runs with judge_runs=10 for statistical validity
+# - To run fractional factorial (hold debater 1 constant), modify:
+#   public-strength-1: value: 0
+#   hidden-strength-1: value: 0
+# - To test multiple models, change to values: ["glm-4.7-flash", "llama2", "mistral"]
+# - To test multiple round counts, change rounds to values: [2, 4, 6]

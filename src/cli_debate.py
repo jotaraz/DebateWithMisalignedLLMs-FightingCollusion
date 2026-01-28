@@ -11,6 +11,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime
 from typing import List, Dict, Tuple, Optional
 import ollama
 
@@ -168,7 +169,8 @@ def multi_judge(
     conversation: str,
     n: int,
     model: str = "llama2",
-    verbose: bool = False
+    verbose: bool = False,
+    use_wandb: bool = False
 ) -> Tuple[int, int, int]:
     """
     Run the judge 'n' times for better statistics.
@@ -179,6 +181,7 @@ def multi_judge(
         n: Number of times to run the judge.
         model: The Ollama model to use for judging.
         verbose: Whether to print debug information.
+        use_wandb: Whether to log per-judge metrics to wandb.
 
     Returns:
         Tuple of (count_0, count_1, count_undecided)
@@ -200,12 +203,23 @@ def multi_judge(
             print(f"Judge run {k+1}/{n}: {tmp}")
 
         # Count verdicts
+        verdict = None
         if msgs[0] in tmp.lower():
             counts[0] += 1
+            verdict = 0
         elif msgs[1] in tmp.lower():
             counts[1] += 1
+            verdict = 1
         elif msgs[2] in tmp.lower() or msgs[3] in tmp.lower():
             counts[2] += 1
+            verdict = -1
+        
+        # Log individual judge runs to wandb
+        if use_wandb and WANDB_AVAILABLE and wandb.run is not None and verdict is not None:
+            wandb.log({
+                f\"judge_run_{k+1}\": verdict,
+                \"judge_run_index\": k
+            })
 
     return tuple(counts)
 
@@ -329,8 +343,32 @@ def run_debate(
 
     # Initialize wandb if requested
     if use_wandb and WANDB_AVAILABLE:
+        # Generate descriptive run name based on experimental parameters
+        run_name = f"cd{public_incentive_strength_0}{hidden_incentive_strength_0}dd{public_incentive_strength_1}{hidden_incentive_strength_1}_{model_0.split('-')[0]}"
+        
+        # Get experiment group from environment or use date-based default
+        experiment_group = os.environ.get("WANDB_GROUP", f"DoE-{datetime.now().strftime('%Y%m%d')}")
+        
+        # Build tags list
+        tags = ["debate", f"model_{model_0}", f"rounds_{max_turns}"]
+        if public_incentive_strength_0 == public_incentive_strength_1 and hidden_incentive_strength_0 == hidden_incentive_strength_1:
+            tags.append("symmetric")
+        else:
+            tags.append("asymmetric")
+        if hidden_incentive_strength_0 == 1 or hidden_incentive_strength_1 == 1:
+            tags.append("misaligned")
+        
+        # Add custom tags from environment
+        custom_tags = os.environ.get("WANDB_TAGS", "")
+        if custom_tags:
+            tags.extend(custom_tags.split(","))
+        
         wandb.init(
             project=wandb_project,
+            name=run_name,
+            group=experiment_group,
+            tags=tags,
+            notes=f"Debate: {public_agenda_0} vs {public_agenda_1} | Debater 0: pub={public_incentive_strength_0}, hid={hidden_incentive_strength_0} | Debater 1: pub={public_incentive_strength_1}, hid={hidden_incentive_strength_1}",
             config={
                 "public_agenda_0": public_agenda_0,
                 "hidden_agenda_0": hidden_agenda_0,
@@ -459,7 +497,8 @@ def save_conversation(
     system_prompt_0: str,
     system_prompt_1: str,
     messages_for_0: List[str],
-    messages_for_1: List[str]
+    messages_for_1: List[str],
+    use_wandb: bool = False
 ) -> str:
     """
     Save the debate conversation to a file.
@@ -489,6 +528,16 @@ def save_conversation(
                 f.write(f"------- Debater 1 -------\n")
                 f.write(messages_for_1[i])
                 f.write("\n\n")
+
+    # Log conversation file as wandb artifact
+    if use_wandb and WANDB_AVAILABLE and wandb.run is not None:
+        artifact = wandb.Artifact(
+            name=f"conversation-{os.path.basename(filename).replace('.txt', '')}",
+            type="debate_transcript",
+            description=f"Full debate transcript including system prompts and private thoughts"
+        )
+        artifact.add_file(filepath)
+        wandb.log_artifact(artifact)
 
     return filepath
 
@@ -659,7 +708,8 @@ def main():
             system_prompt_0,
             system_prompt_1,
             messages_for_0,
-            messages_for_1
+            messages_for_1,
+            use_wandb=args.wandb
         )
         if not args.quiet:
             print(f"\n✓ Saved conversation to: {conv_path}")
@@ -685,7 +735,8 @@ As a message, please output either [0], [1] or [undecided] depending on whose ar
         conversation,
         args.judge_runs,
         model=args.judge_model,
-        verbose=args.verbose
+        verbose=args.verbose,
+        use_wandb=args.wandb
     )
 
     if not args.quiet:

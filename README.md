@@ -38,3 +38,49 @@ In future projects one should explore instilling the hidden agenda via fine-tuni
 
 This project was done at [ML4Good](https://www.ml4good.org/about) by Jędrzej Kolbert and Johannes Taraz.
 
+---
+
+## Running Experiments
+
+### Quick Start
+
+```bash
+# 1. Login to W&B (if using tracking)
+uv run wandb login
+
+# 2. Run a single debate
+uv run python src/cli_debate.py --public-agenda-0 cats --public-agenda-1 dogs --wandb
+
+# 3. Run DoE experiments (recommended)
+./run_doe.sh fractional
+```
+
+### Design of Experiments (DoE)
+
+For systematic experimentation with W&B tracking:
+
+```bash
+# Pilot study (4 conditions, ~10 min)
+./run_doe.sh pilot
+
+# Fractional factorial (6 conditions, ~15 min)
+./run_doe.sh fractional
+
+# Full factorial (36 conditions, ~60-90 min)
+./run_doe.sh full
+
+# Analyze results
+./run_doe.sh analyze
+```
+
+**See [DOE_GUIDE.md](DOE_GUIDE.md) for comprehensive DoE documentation.**
+
+### Files
+
+- **[CLI_USAGE.md](CLI_USAGE.md)** - Command-line interface guide
+- **[DOE_GUIDE.md](DOE_GUIDE.md)** - Design of Experiments guide with W&B
+- **[run_doe.sh](run_doe.sh)** - Main DoE launcher script
+- **[src/run_doe_batch.py](src/run_doe_batch.py)** - Batch experiment runner
+- **[src/analyze_doe_results.py](src/analyze_doe_results.py)** - Results analysis
+
+---

@@ -1,0 +1,2 @@
+cddd00
+pub 0 hid 0 : 1 0 1
