@@ -187,6 +187,7 @@ def multi_judge(
         Tuple of (count_0, count_1, count_undecided)
     """
     counts = [0, 0, 0]  # [debater 0, debater 1, undecided]
+    judge_outputs = []  # Track all judge outputs
     msgs = [
         '"message": "[0]"',
         '"message": "[1]"',
@@ -197,7 +198,10 @@ def multi_judge(
     for k in range(n):
         tmp = judge(judge_sysprompt, conversation, model)
         if tmp is None:
+            judge_outputs.append(None)
             continue
+        
+        judge_outputs.append(tmp)  # Store full judge output
             
         if verbose:
             print(f"Judge run {k+1}/{n}: {tmp}")
@@ -217,9 +221,16 @@ def multi_judge(
         # Log individual judge runs to wandb
         if use_wandb and WANDB_AVAILABLE and wandb.run is not None and verdict is not None:
             wandb.log({
-                f\"judge_run_{k+1}\": verdict,
-                \"judge_run_index\": k
+                f"judge_run_{k+1}": verdict,
+                f"judge_run_{k+1}_output": tmp,  # Log full judge output
+                "judge_run_index": k
             })
+    
+    # Log all judge outputs to wandb
+    if use_wandb and WANDB_AVAILABLE and wandb.run is not None:
+        wandb.log({
+            "all_judge_outputs": judge_outputs
+        })
 
     return tuple(counts)
 
@@ -399,6 +410,8 @@ def run_debate(
     messages_for_0 = ['Begin the debate. Make your opening argument.']
     messages_for_1 = []
     messages_for_judge = []
+    private_thoughts_0 = []  # Track debater 0's private thoughts
+    private_thoughts_1 = []  # Track debater 1's private thoughts
 
     for turn in range(max_turns):
         if verbose:
@@ -430,11 +443,13 @@ def run_debate(
         # Parse and strip private thoughts
         try:
             response_dict = json.loads(response)
-            response_dict.pop("private thoughts", None)
+            private_thought = response_dict.pop("private thoughts", None)
+            private_thoughts_0.append(private_thought)  # Store private thoughts
             message_without_reasoning = json.dumps(response_dict, indent=2)
         except json.JSONDecodeError as e:
             print(f"Warning: Could not parse Debater 0's response: {e}", file=sys.stderr)
             message_without_reasoning = response
+            private_thoughts_0.append(None)
 
         messages_for_1.append(message_without_reasoning)
         messages_for_judge.append(message_without_reasoning)
@@ -467,11 +482,13 @@ def run_debate(
         # Parse and strip private thoughts
         try:
             response_dict = json.loads(response)
-            response_dict.pop("private thoughts", None)
+            private_thought = response_dict.pop("private thoughts", None)
+            private_thoughts_1.append(private_thought)  # Store private thoughts
             message_without_reasoning = json.dumps(response_dict, indent=2)
         except json.JSONDecodeError as e:
             print(f"Warning: Could not parse Debater 1's response: {e}", file=sys.stderr)
             message_without_reasoning = response
+            private_thoughts_1.append(None)
 
         messages_for_0.append(message_without_reasoning)
         messages_for_judge.append(message_without_reasoning)
@@ -485,6 +502,8 @@ def run_debate(
             "messages_for_0": messages_for_0,
             "messages_for_1": messages_for_1,
             "messages_for_judge": messages_for_judge,
+            "private_thoughts_debater_0": private_thoughts_0,
+            "private_thoughts_debater_1": private_thoughts_1,
             "actual_turns": len(messages_for_judge) // 2,
         })
     
